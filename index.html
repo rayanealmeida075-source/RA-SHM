@@ -1,4 +1,199 @@
-<script>
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel de Monitoramento Estrutural - Tempo Real</title>
+    <!-- Chart.js para gráficos -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Firebase SDK (Compat) -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+    <style>
+        body {
+            background-color: #0F172A;
+            color: #F8FAFC;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .header {
+            background-color: #1E293B;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #F8FAFC;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .live-indicator {
+            font-size: 0.85rem;
+            color: #10B981;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .pulse-dot {
+            width: 10px;
+            height: 10px;
+            background-color: #10B981;
+            border-radius: 50%;
+            display: inline-block;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+        }
+
+        .controls {
+            margin-bottom: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            background-color: #1E293B;
+            padding: 15px;
+            border-radius: 8px;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        input[type="text"] {
+            flex: 1;
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #334155;
+            background-color: #0F172A;
+            color: #FFF;
+        }
+
+        button {
+            padding: 10px 20px;
+            background-color: #3B82F6;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        button:hover {
+            background-color: #2563EB;
+        }
+
+        .kpi-container {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            justify-content: space-between;
+        }
+
+        .kpi-card {
+            background-color: #1E293B;
+            flex: 1;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            border-top: 4px solid #3B82F6;
+        }
+
+        .kpi-title {
+            font-size: 0.8rem;
+            color: #94A3B8;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .kpi-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+            gap: 20px;
+        }
+
+        .chart-card {
+            background-color: #1E293B;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        canvas {
+            max-width: 100%;
+        }
+
+        .status-badge {
+            font-size: 0.85rem;
+            color: #10B981;
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <span>⚡ PAINEL DE MONITORAMENTO ESTRUTURAL (FIREBASE DINÂMICO)</span>
+        <div class="live-indicator">
+            <span class="pulse-dot"></span>
+            <span id="txtLiveStatus">INICIALIZANDO...</span>
+        </div>
+    </div>
+
+    <!-- Campo para inserir a URL do Firebase no Painel -->
+    <div class="controls">
+        <div class="input-group">
+            <input type="text" id="firebaseUrlInput" value="https://shm-tcc-default-rtdb.firebaseio.com/" placeholder="Cole a URL base do seu Firebase aqui...">
+            <button onclick="conectarFirebaseAutomaticamente()">Reconectar</button>
+            <span id="lastUpdate" class="status-badge">Monitorando</span>
+        </div>
+    </div>
+
+    <!-- Indicadores KPI -->
+    <div class="kpi-container">
+        <div class="kpi-card" style="border-color: #3B82F6;">
+            <div class="kpi-title">ÚLTIMO STATUS</div>
+            <div class="kpi-value" id="kpiStatus">--</div>
+        </div>
+        <div class="kpi-card" style="border-color: #10B981;">
+            <div class="kpi-title">ACELERAÇÃO MÁX. Z (g)</div>
+            <div class="kpi-value" id="kpiMaxZ">0.0000</div>
+        </div>
+        <div class="kpi-card" style="border-color: #F59E0B;">
+            <div class="kpi-title">TOTAL DE LEITURAS</div>
+            <div class="kpi-value" id="kpiLeituras">0</div>
+        </div>
+    </div>
+
+    <!-- Gráficos -->
+    <div class="charts-grid">
+        <div class="chart-card">
+            <canvas id="chartAceleracao"></canvas>
+        </div>
+        <div class="chart-card">
+            <canvas id="chartFFT"></canvas>
+        </div>
+    </div>
+
+    <script>
         let chartAcelInstance = null;
         let chartFFTInstance = null;
         let totalLeituras = 0;
@@ -8,55 +203,63 @@
         const MAX_PONTOS = 60;
 
         function inicializarGraficos() {
-            const ctxAcel = document.getElementById('chartAceleracao').getContext('2d');
-            chartAcelInstance = new Chart(ctxAcel, {
-                type: 'line',
-                data: {
-                    labels: [],
-                    datasets: [
-                        { label: 'Eixo X', data: [], borderColor: '#EF4444', borderWidth: 1.5, fill: false, pointRadius: 0 },
-                        { label: 'Eixo Y', data: [], borderColor: '#10B981', borderWidth: 1.5, fill: false, pointRadius: 0 },
-                        { label: 'Eixo Z', data: [], borderColor: '#3B82F6', borderWidth: 1.5, fill: false, pointRadius: 0 }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    animation: false,
-                    plugins: {
-                        title: { display: true, text: '1. Tendência Temporal de Aceleração (X, Y, Z)', color: '#F8FAFC' },
-                        legend: { labels: { color: '#CBD5E1' } }
+            try {
+                const elAcel = document.getElementById('chartAceleracao');
+                if (!elAcel) return;
+                const ctxAcel = elAcel.getContext('2d');
+                chartAcelInstance = new Chart(ctxAcel, {
+                    type: 'line',
+                    data: {
+                        labels: [],
+                        datasets: [
+                            { label: 'Eixo X', data: [], borderColor: '#EF4444', borderWidth: 1.5, fill: false, pointRadius: 0 },
+                            { label: 'Eixo Y', data: [], borderColor: '#10B981', borderWidth: 1.5, fill: false, pointRadius: 0 },
+                            { label: 'Eixo Z', data: [], borderColor: '#3B82F6', borderWidth: 1.5, fill: false, pointRadius: 0 }
+                        ]
                     },
-                    scales: {
-                        x: { ticks: { color: '#CBD5E1' }, grid: { color: '#334155' } },
-                        y: { ticks: { color: '#CBD5E1' }, grid: { color: '#334155' } }
+                    options: {
+                        responsive: true,
+                        animation: false,
+                        plugins: {
+                            title: { display: true, text: '1. Tendência Temporal de Aceleração (X, Y, Z)', color: '#F8FAFC' },
+                            legend: { labels: { color: '#CBD5E1' } }
+                        },
+                        scales: {
+                            x: { ticks: { color: '#CBD5E1' }, grid: { color: '#334155' } },
+                            y: { ticks: { color: '#CBD5E1' }, grid: { color: '#334155' } }
+                        }
                     }
-                }
-            });
+                });
 
-            const ctxFFT = document.getElementById('chartFFT').getContext('2d');
-            chartFFTInstance = new Chart(ctxFFT, {
-                type: 'bar',
-                data: {
-                    labels: [],
-                    datasets: [{
-                        label: 'Magnitude (g)',
-                        data: [],
-                        backgroundColor: '#8B5CF6'
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    animation: false,
-                    plugins: {
-                        title: { display: true, text: '2. Espectro de Frequência (FFT Z)', color: '#F8FAFC' },
-                        legend: { display: false }
+                const elFFT = document.getElementById('chartFFT');
+                if (!elFFT) return;
+                const ctxFFT = elFFT.getContext('2d');
+                chartFFTInstance = new Chart(ctxFFT, {
+                    type: 'bar',
+                    data: {
+                        labels: [],
+                        datasets: [{
+                            label: 'Magnitude (g)',
+                            data: [],
+                            backgroundColor: '#8B5CF6'
+                        }]
                     },
-                    scales: {
-                        x: { ticks: { color: '#CBD5E1' }, grid: { color: '#334155' } },
-                        y: { ticks: { color: '#CBD5E1' }, grid: { color: '#334155' } }
+                    options: {
+                        responsive: true,
+                        animation: false,
+                        plugins: {
+                            title: { display: true, text: '2. Espectro de Frequência (FFT Z)', color: '#F8FAFC' },
+                            legend: { display: false }
+                        },
+                        scales: {
+                            x: { ticks: { color: '#CBD5E1' }, grid: { color: '#334155' } },
+                            y: { ticks: { color: '#CBD5E1' }, grid: { color: '#334155' } }
+                        }
                     }
-                }
-            });
+                });
+            } catch (e) {
+                console.error("Erro ao inicializar gráficos:", e);
+            }
         }
 
         function conectarFirebaseAutomaticamente() {
@@ -69,6 +272,8 @@
             urlInput = urlInput.replace(/\/dadosAtuais(\.json)?\/?$/, '').replace(/\.json\/?$/, '');
 
             try {
+                if (typeof firebase === 'undefined') return;
+
                 if (firebase.apps.length === 0) {
                     firebase.initializeApp({ databaseURL: urlInput });
                 } else {
@@ -105,25 +310,27 @@
                     document.getElementById('kpiMaxZ').innerText = maxZGlobal.toFixed(4);
                     document.getElementById('kpiLeituras').innerText = totalLeituras.toLocaleString('pt-BR');
 
-                    let labels = chartAcelInstance.data.labels;
-                    let dataX = chartAcelInstance.data.datasets[0].data;
-                    let dataY = chartAcelInstance.data.datasets[1].data;
-                    let dataZ = chartAcelInstance.data.datasets[2].data;
+                    if (chartAcelInstance) {
+                        let labels = chartAcelInstance.data.labels;
+                        let dataX = chartAcelInstance.data.datasets[0].data;
+                        let dataY = chartAcelInstance.data.datasets[1].data;
+                        let dataZ = chartAcelInstance.data.datasets[2].data;
 
-                    labels.push(t);
-                    dataX.push(x);
-                    dataY.push(y);
-                    dataZ.push(z);
+                        labels.push(t);
+                        dataX.push(x);
+                        dataY.push(y);
+                        dataZ.push(z);
 
-                    if (labels.length > MAX_PONTOS) {
-                        labels.shift();
-                        dataX.shift();
-                        dataY.shift();
-                        dataZ.shift();
+                        if (labels.length > MAX_PONTOS) {
+                            labels.shift();
+                            dataX.shift();
+                            dataY.shift();
+                            dataZ.shift();
+                        }
+                        chartAcelInstance.update('none');
                     }
-                    chartAcelInstance.update('none');
 
-                    if (dados.fft_freq_z && dados.fft_mag_z) {
+                    if (chartFFTInstance && dados.fft_freq_z && dados.fft_mag_z) {
                         chartFFTInstance.data.labels = dados.fft_freq_z;
                         chartFFTInstance.data.datasets[0].data = dados.fft_mag_z;
                         chartFFTInstance.update('none');
@@ -136,9 +343,11 @@
             }
         }
 
-        // Garante que o DOM foi totalmente renderizado antes de desenhar e conectar, evitando a tela branca
+        // Executa com segurança assim que o documento carregar
         window.addEventListener('DOMContentLoaded', () => {
             inicializarGraficos();
-            conectarFirebaseAutomaticamente();
+            setTimeout(conectarFirebaseAutomaticamente, 300);
         });
     </script>
+</body>
+</html>
