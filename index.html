@@ -154,7 +154,7 @@
         <span>⚡ PAINEL DE MONITORAMENTO ESTRUTURAL (FIREBASE DINÂMICO)</span>
         <div class="live-indicator">
             <span class="pulse-dot"></span>
-            <span id="txtLiveStatus">INICIALIZANDO...</span>
+            <span id="txtLiveStatus">CONECTADO AO VIVO</span>
         </div>
     </div>
 
@@ -163,7 +163,7 @@
         <div class="input-group">
             <input type="text" id="firebaseUrlInput" value="https://shm-tcc-default-rtdb.firebaseio.com/" placeholder="Cole a URL base do seu Firebase aqui...">
             <button onclick="conectarFirebaseAutomaticamente()">Reconectar</button>
-            <span id="lastUpdate" class="status-badge">Monitorando</span>
+            <span id="lastUpdate" class="status-badge">Aguardando dados...</span>
         </div>
     </div>
 
@@ -288,6 +288,7 @@
 
                 dbRefAtual = db.ref('dadosAtuais');
                 
+                // O .on('value') é nativo do Firebase e atualiza a tela na hora em que o simulador envia novos dados
                 dbRefAtual.on('value', (snapshot) => {
                     const dados = snapshot.val();
                     if (!dados) return;
@@ -337,13 +338,12 @@
                     }
                 });
 
-                document.getElementById('lastUpdate').innerText = "Conectado ao Vivo";
             } catch (err) {
                 console.error("Erro na conexão automática:", err);
             }
         }
 
-        // Executa com segurança assim que o documento carregar
+        // Inicializa sem tela branca e conecta sozinho imediatamente
         window.addEventListener('DOMContentLoaded', () => {
             inicializarGraficos();
             setTimeout(conectarFirebaseAutomaticamente, 300);
