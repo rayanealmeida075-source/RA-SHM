@@ -1,40 +1,139 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>RA-SHM | Monitoramento</title>
+<script>
+        let chartAcelInstance = null;
+        let chartFFTInstance = null;
+        let totalLeituras = 0;
+        let maxZGlobal = 0;
+        let dbRefAtual = null;
 
-  <!-- Tailwind CSS para estilização -->
-  <script src="https://cdn.tailwindcss.com"></script>
+        const MAX_PONTOS = 60;
 
-  <!-- Chart.js para geração dos gráficos -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+        function inicializarGraficos() {
+            const ctxAcel = document.getElementById('chartAceleracao').getContext('2d');
+            chartAcelInstance = new Chart(ctxAcel, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        { label: 'Eixo X', data: [], borderColor: '#EF4444', borderWidth: 1.5, fill: false, pointRadius: 0 },
+                        { label: 'Eixo Y', data: [], borderColor: '#10B981', borderWidth: 1.5, fill: false, pointRadius: 0 },
+                        { label: 'Eixo Z', data: [], borderColor: '#3B82F6', borderWidth: 1.5, fill: false, pointRadius: 0 }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    animation: false,
+                    plugins: {
+                        title: { display: true, text: '1. Tendência Temporal de Aceleração (X, Y, Z)', color: '#F8FAFC' },
+                        legend: { labels: { color: '#CBD5E1' } }
+                    },
+                    scales: {
+                        x: { ticks: { color: '#CBD5E1' }, grid: { color: '#334155' } },
+                        y: { ticks: { color: '#CBD5E1' }, grid: { color: '#334155' } }
+                    }
+                }
+            });
 
-  <!-- Firebase SDKs -->
-  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+            const ctxFFT = document.getElementById('chartFFT').getContext('2d');
+            chartFFTInstance = new Chart(ctxFFT, {
+                type: 'bar',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Magnitude (g)',
+                        data: [],
+                        backgroundColor: '#8B5CF6'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    animation: false,
+                    plugins: {
+                        title: { display: true, text: '2. Espectro de Frequência (FFT Z)', color: '#F8FAFC' },
+                        legend: { display: false }
+                    },
+                    scales: {
+                        x: { ticks: { color: '#CBD5E1' }, grid: { color: '#334155' } },
+                        y: { ticks: { color: '#CBD5E1' }, grid: { color: '#334155' } }
+                    }
+                }
+            });
+        }
 
-  <style>
-    body {
-      background-color: #0f172a;
-      color: #f8fafc;
-    }
-  </style>
-</head>
-<body class="p-6 font-sans">
+        function conectarFirebaseAutomaticamente() {
+            let urlInput = document.getElementById('firebaseUrlInput').value.trim();
+            if (!urlInput) return;
 
-  <div class="max-w-7xl mx-auto space-y-6">
-    
-    <!-- Cabeçalho -->
-    <header class="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-slate-700 pb-4 gap-4">
-      <div>
-        <h1 class="text-2xl font-bold text-slate-100">Painel de Monitoramento (RA-SHM)</h1>
-        <p id="txtLiveStatus" class="text-sm font-semibold text-amber-400">AGUARDANDO CONEXÃO...</p>
-      </div>
-      <div class="text-right">
-        <span id="lastUpdate" class="text-xs text-slate-400">Não atualizado</span>
-      </div>
-    </header>
+            urlInput = urlInput.replace(/\/dadosAtuais(\.json)?\/?$/, '').replace(/\.json\/?$/, '');
 
-    <!-- Configuração de Con
+            try {
+                if (firebase.apps.length === 0) {
+                    firebase.initializeApp({ databaseURL: urlInput });
+                } else {
+                    firebase.app().options.databaseURL = urlInput;
+                }
+
+                const db = firebase.database();
+
+                if (dbRefAtual) {
+                    dbRefAtual.off();
+                }
+
+                dbRefAtual = db.ref('dadosAtuais');
+                
+                dbRefAtual.on('value', (snapshot) => {
+                    const dados = snapshot.val();
+                    if (!dados) return;
+
+                    document.getElementById('txtLiveStatus').innerText = "CONECTADO (AO VIVO)";
+                    document.getElementById('lastUpdate').innerText = "Atualizado às " + new Date().toLocaleTimeString();
+
+                    let t = dados.tempo || new Date().toLocaleTimeString();
+                    let x = Number(dados.x || 0);
+                    let y = Number(dados.y || 0);
+                    let z = Number(dados.z || 0);
+                    let status = dados.status || "Normal";
+
+                    totalLeituras++;
+                    if (Math.abs(z) > maxZGlobal) {
+                        maxZGlobal = Math.abs(z);
+                    }
+
+                    document.getElementById('kpiStatus').innerText = status;
+                    document.getElementById('kpiMaxZ').innerText = maxZGlobal.toFixed(4);
+                    document.getElementById('kpiLeituras').innerText = totalLeituras.toLocaleString('pt-BR');
+
+                    let labels = chartAcelInstance.data.labels;
+                    let dataX = chartAcelInstance.data.datasets[0].data;
+                    let dataY = chartAcelInstance.data.datasets[1].data;
+                    let dataZ = chartAcelInstance.data.datasets[2].data;
+
+                    labels.push(t);
+                    dataX.push(x);
+                    dataY.push(y);
+                    dataZ.push(z);
+
+                    if (labels.length > MAX_PONTOS) {
+                        labels.shift();
+                        dataX.shift();
+                        dataY.shift();
+                        dataZ.shift();
+                    }
+                    chartAcelInstance.update('none');
+
+                    if (dados.fft_freq_z && dados.fft_mag_z) {
+                        chartFFTInstance.data.labels = dados.fft_freq_z;
+                        chartFFTInstance.data.datasets[0].data = dados.fft_mag_z;
+                        chartFFTInstance.update('none');
+                    }
+                });
+
+                document.getElementById('lastUpdate').innerText = "Conectado ao Vivo";
+            } catch (err) {
+                console.error("Erro na conexão automática:", err);
+            }
+        }
+
+        // Inicializa os gráficos e conecta sozinho assim que a página abre
+        inicializarGraficos();
+        conectarFirebaseAutomaticamente();
+    </script>
