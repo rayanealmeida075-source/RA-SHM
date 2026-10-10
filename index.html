@@ -60,7 +60,10 @@
         }
 
         function conectarFirebaseAutomaticamente() {
-            let urlInput = document.getElementById('firebaseUrlInput').value.trim();
+            const inputEl = document.getElementById('firebaseUrlInput');
+            if (!inputEl) return;
+
+            let urlInput = inputEl.value.trim();
             if (!urlInput) return;
 
             urlInput = urlInput.replace(/\/dadosAtuais(\.json)?\/?$/, '').replace(/\.json\/?$/, '');
@@ -133,7 +136,9 @@
             }
         }
 
-        // Inicializa os gráficos e conecta sozinho assim que a página abre
-        inicializarGraficos();
-        conectarFirebaseAutomaticamente();
+        // Garante que o DOM foi totalmente renderizado antes de desenhar e conectar, evitando a tela branca
+        window.addEventListener('DOMContentLoaded', () => {
+            inicializarGraficos();
+            conectarFirebaseAutomaticamente();
+        });
     </script>
