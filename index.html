@@ -3,9 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Painel de Monitoramento Estrutural - Tempo Real</title>
-    <!-- Chart.js para geração de gráficos -->
+    <title>Painel de Monitoramento Estrutural - Tempo Real (Firebase)</title>
+    <!-- Chart.js para gráficos -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Firebase SDK (Compat) -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
     <style>
         body {
             background-color: #0F172A;
@@ -82,38 +85,6 @@
             font-weight: bold;
         }
 
-        .controls {
-            margin-bottom: 20px;
-            display: flex;
-            gap: 10px;
-            align-items: center;
-            background-color: #1E293B;
-            padding: 15px;
-            border-radius: 8px;
-        }
-
-        button {
-            padding: 10px 20px;
-            background-color: #3B82F6;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-weight: bold;
-        }
-
-        button:hover {
-            background-color: #2563EB;
-        }
-
-        button.danger {
-            background-color: #EF4444;
-        }
-
-        button.danger:hover {
-            background-color: #DC2626;
-        }
-
         .charts-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
@@ -141,25 +112,18 @@
 <body>
 
     <div class="header">
-        <span>⚡ PAINEL DE MONITORAMENTO ESTRUTURAL & SIMULAÇÃO DIRETA</span>
+        <span>⚡ PAINEL DE MONITORAMENTO ESTRUTURAL (FIREBASE EM TEMPO REAL)</span>
         <div class="live-indicator">
             <span class="pulse-dot"></span>
-            <span id="txtLiveStatus">SIMULAÇÃO ATIVA</span>
+            <span id="txtLiveStatus">AGUARDANDO CONEXÃO...</span>
         </div>
-    </div>
-
-    <!-- Painel de Controles -->
-    <div class="controls">
-        <button id="btnPausar" onclick="alternarSimulacao()">Pausar Simulação</button>
-        <button class="danger" onclick="injetarVibracaoExtrema()">Injetar Anomalia/Vibração</button>
-        <span id="lastUpdate" class="status-badge">Sistema online e em tempo real...</span>
     </div>
 
     <!-- Indicadores KPI -->
     <div class="kpi-container">
         <div class="kpi-card" style="border-color: #3B82F6;">
-            <div class="kpi-title">STATUS ESTRUTURAL</div>
-            <div class="kpi-value" id="kpiStatus">Normal</div>
+            <div class="kpi-title">ÚLTIMO STATUS</div>
+            <div class="kpi-value" id="kpiStatus">--</div>
         </div>
         <div class="kpi-card" style="border-color: #10B981;">
             <div class="kpi-title">ACELERAÇÃO MÁX. Z (g)</div>
@@ -171,7 +135,7 @@
         </div>
     </div>
 
-    <!-- Gráficos -->
+    <!-- Seção dos Gráficos -->
     <div class="charts-grid">
         <div class="chart-card">
             <canvas id="chartAceleracao"></canvas>
@@ -182,15 +146,19 @@
     </div>
 
     <script>
+        // CONFIGURAÇÃO DO FIREBASE
+        const firebaseConfig = {
+            databaseURL: "https://shm-tcc-default-rtdb.firebaseio.com/"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
         let chartAcelInstance = null;
         let chartFFTInstance = null;
-        let simulando = true;
-        let tempoTotal = 0;
         let totalLeituras = 0;
         let maxZGlobal = 0;
-        let fatorAnomalia = 1.0;
 
-        const MAX_PONTOS = 100;
+        const MAX_PONTOS = 60; // Número máximo de pontos visíveis no gráfico de linha
 
         function inicializarGraficos() {
             const ctxAcel = document.getElementById('chartAceleracao').getContext('2d');
@@ -213,7 +181,7 @@
                     },
                     scales: {
                         x: { ticks: { color: '#CBD5E1' }, grid: { color: '#334155' } },
-                        y: { ticks: { color: '#CBD5E1' }, grid: { color: '#334155' }, suggestedMin: -1.5, suggestedMax: 1.5 }
+                        y: { ticks: { color: '#CBD5E1' }, grid: { color: '#334155' } }
                     }
                 }
             });
@@ -222,10 +190,10 @@
             chartFFTInstance = new Chart(ctxFFT, {
                 type: 'bar',
                 data: {
-                    labels: ['2.5 Hz', '5.0 Hz', '7.5 Hz', '10.0 Hz', '12.5 Hz', '15.0 Hz', '20.0 Hz'],
+                    labels: [],
                     datasets: [{
-                        label: 'Magnitude Z (g)',
-                        data: [0.05, 0.12, 0.08, 0.25, 0.09, 0.04, 0.02],
+                        label: 'Magnitude (g)',
+                        data: [],
                         backgroundColor: '#8B5CF6'
                     }]
                 },
@@ -233,7 +201,7 @@
                     responsive: true,
                     animation: false,
                     plugins: {
-                        title: { display: true, text: '2. Espectro de Frequência - Eixo Z (FFT)', color: '#F8FAFC' },
+                        title: { display: true, text: '2. Espectro de Frequência (FFT Z)', color: '#F8FAFC' },
                         legend: { display: false }
                     },
                     scales: {
@@ -244,40 +212,41 @@
             });
         }
 
-        function cicloSimulacao() {
-            if (!simulando) return;
+        inicializarGraficos();
 
-            tempoTotal += 0.1;
+        // OUVINTE EM TEMPO REAL DO FIREBASE
+        db.ref('dadosAtuais').on('value', (snapshot) => {
+            const dados = snapshot.val();
+            if (!dados) return;
+
+            document.getElementById('txtLiveStatus').innerText = "CONECTADO (AO VIVO)";
+
+            let t = dados.tempo || new Date().toLocaleTimeString();
+            let x = Number(dados.x || 0);
+            let y = Number(dados.y || 0);
+            let z = Number(dados.z || 0);
+            let status = dados.status || "Normal";
+
             totalLeituras++;
-
-            let x = (Math.sin(tempoTotal * 3) * 0.1 + (Math.random() - 0.5) * 0.05) * fatorAnomalia;
-            let y = (Math.cos(tempoTotal * 2.5) * 0.1 + (Math.random() - 0.5) * 0.05) * fatorAnomalia;
-            let z = (Math.sin(tempoTotal * 5) * 0.2 + 0.98 + (Math.random() - 0.5) * 0.08) * fatorAnomalia;
-
             if (Math.abs(z) > maxZGlobal) {
                 maxZGlobal = Math.abs(z);
             }
 
-            let statusStr = "Normal";
-            let corStatus = "#10B981";
-            if (fatorAnomalia > 1.5) {
-                statusStr = "Alerta: Vibração Alta!";
-                corStatus = "#EF4444";
-            }
-            document.getElementById('kpiStatus').innerText = statusStr;
-            document.getElementById('kpiStatus').style.color = corStatus;
+            // Atualiza KPIs
+            document.getElementById('kpiStatus').innerText = status;
             document.getElementById('kpiMaxZ').innerText = maxZGlobal.toFixed(4);
             document.getElementById('kpiLeituras').innerText = totalLeituras.toLocaleString('pt-BR');
 
+            // Atualiza Gráfico de Aceleração
             let labels = chartAcelInstance.data.labels;
             let dataX = chartAcelInstance.data.datasets[0].data;
             let dataY = chartAcelInstance.data.datasets[1].data;
             let dataZ = chartAcelInstance.data.datasets[2].data;
 
-            labels.push(tempoTotal.toFixed(1));
-            dataX.push(x.toFixed(4));
-            dataY.push(y.toFixed(4));
-            dataZ.push(z.toFixed(4));
+            labels.push(t);
+            dataX.push(x);
+            dataY.push(y);
+            dataZ.push(z);
 
             if (labels.length > MAX_PONTOS) {
                 labels.shift();
@@ -285,45 +254,15 @@
                 dataY.shift();
                 dataZ.shift();
             }
-
             chartAcelInstance.update('none');
 
-            let fftData = chartFFTInstance.data.datasets[0].data.map(val => {
-                let baseVal = parseFloat(val);
-                return Math.max(0.01, (baseVal + (Math.random() - 0.5) * 0.05) * (fatorAnomalia > 1 ? 1.2 : 1.0)).toFixed(4);
-            });
-            chartFFTInstance.data.datasets[0].data = fftData;
-            chartFFTInstance.update('none');
-
-            if (fatorAnomalia > 1.0) {
-                fatorAnomalia -= 0.02;
-                if (fatorAnomalia < 1.0) fatorAnomalia = 1.0;
+            // Atualiza Gráfico FFT (se houver dados enviados pelo simulador)
+            if (dados.fft_freq_z && dados.fft_mag_z) {
+                chartFFTInstance.data.labels = dados.fft_freq_z;
+                chartFFTInstance.data.datasets[0].data = dados.fft_mag_z;
+                chartFFTInstance.update('none');
             }
-
-            document.getElementById('lastUpdate').innerText = 'Atualizado em ' + new Date().toLocaleTimeString();
-        }
-
-        function alternarSimulacao() {
-            simulando = !simulando;
-            const btn = document.getElementById('btnPausar');
-            const txt = document.getElementById('txtLiveStatus');
-            if (simulando) {
-                btn.innerText = "Pausar Simulação";
-                btn.style.backgroundColor = "#3B82F6";
-                txt.innerText = "SIMULAÇÃO ATIVA";
-            } else {
-                btn.innerText = "Retomar Simulação";
-                btn.style.backgroundColor = "#10B981";
-                txt.innerText = "PAUSADO";
-            }
-        }
-
-        function injetarVibracaoExtrema() {
-            fatorAnomalia = 2.5;
-        }
-
-        inicializarGraficos();
-        setInterval(cicloSimulacao, 100);
+        });
     </script>
 </body>
 </html>
