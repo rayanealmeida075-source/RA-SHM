@@ -211,37 +211,4 @@
                     datasets: [
                         { label: 'Eixo X', data: [], borderColor: '#EF4444', borderWidth: 1.5, fill: false, pointRadius: 0 },
                         { label: 'Eixo Y', data: [], borderColor: '#10B981', borderWidth: 1.5, fill: false, pointRadius: 0 },
-                        { label: 'Eixo Z', data: [], borderColor: '#3B82F6', borderWidth: 1.5, fill: false, pointRadius: 0 }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    animation: false,
-                    plugins: {
-                        title: { display: true, text: '1. Tendência Temporal de Aceleração (X, Y, Z)', color: '#F8FAFC' },
-                        legend: { labels: { color: '#CBD5E1' } }
-                    },
-                    scales: {
-                        x: { ticks: { color: '#CBD5E1' }, grid: { color: '#334155' } },
-                        y: { ticks: { color: '#CBD5E1' }, grid: { color: '#334155' } }
-                    }
-                }
-            });
-
-            const ctxFFT = document.getElementById('chartFFT').getContext('2d');
-            chartFFTInstance = new Chart(ctxFFT, {
-                type: 'bar',
-                data: {
-                    labels: [],
-                    datasets: [{
-                        label: 'Magnitude (g)',
-                        data: [],
-                        backgroundColor: '#8B5CF6'
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    animation: false,
-                    plugins: {
-                        title: { display: true, text: '2. Espectro de Frequência (FFT Z)', color: '#F8FAFC' },
-                        legend: { display:
+                        { label: 'Eixo Z', data: [], borderColor: '#3B82F6', borderWidth
