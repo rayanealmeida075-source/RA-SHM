@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Painel de Monitoramento Estrutural - Tempo Real (Firebase)</title>
+    <title>Painel de Monitoramento Estrutural - Tempo Real</title>
     <!-- Chart.js para gráficos -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- Firebase SDK (Compat) -->
@@ -55,6 +55,45 @@
             0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
             70% { transform: scale(1); box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); }
             100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+        }
+
+        .controls {
+            margin-bottom: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            background-color: #1E293B;
+            padding: 15px;
+            border-radius: 8px;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        input[type="text"] {
+            flex: 1;
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #334155;
+            background-color: #0F172A;
+            color: #FFF;
+        }
+
+        button {
+            padding: 10px 20px;
+            background-color: #3B82F6;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        button:hover {
+            background-color: #2563EB;
         }
 
         .kpi-container {
@@ -112,10 +151,19 @@
 <body>
 
     <div class="header">
-        <span>⚡ PAINEL DE MONITORAMENTO ESTRUTURAL (FIREBASE EM TEMPO REAL)</span>
+        <span>⚡ PAINEL DE MONITORAMENTO ESTRUTURAL (FIREBASE DINÂMICO)</span>
         <div class="live-indicator">
             <span class="pulse-dot"></span>
-            <span id="txtLiveStatus">AGUARDANDO CONEXÃO...</span>
+            <span id="txtLiveStatus">AGUARDANDO CONEXÃO</span>
+        </div>
+    </div>
+
+    <!-- Campo para inserir a URL do Firebase no Painel -->
+    <div class="controls">
+        <div class="input-group">
+            <input type="text" id="firebaseUrlInput" value="https://shm-tcc-default-rtdb.firebaseio.com/" placeholder="Cole a URL base do seu Firebase aqui...">
+            <button onclick="conectarFirebase()">Conectar Painel</button>
+            <span id="lastUpdate" class="status-badge">Desconectado</span>
         </div>
     </div>
 
@@ -135,7 +183,7 @@
         </div>
     </div>
 
-    <!-- Seção dos Gráficos -->
+    <!-- Gráficos -->
     <div class="charts-grid">
         <div class="chart-card">
             <canvas id="chartAceleracao"></canvas>
@@ -146,19 +194,13 @@
     </div>
 
     <script>
-        // CONFIGURAÇÃO DO FIREBASE
-        const firebaseConfig = {
-            databaseURL: "https://shm-tcc-default-rtdb.firebaseio.com/"
-        };
-        firebase.initializeApp(firebaseConfig);
-        const db = firebase.database();
-
         let chartAcelInstance = null;
         let chartFFTInstance = null;
         let totalLeituras = 0;
         let maxZGlobal = 0;
+        let dbRefAtual = null;
 
-        const MAX_PONTOS = 60; // Número máximo de pontos visíveis no gráfico de linha
+        const MAX_PONTOS = 60;
 
         function inicializarGraficos() {
             const ctxAcel = document.getElementById('chartAceleracao').getContext('2d');
@@ -202,67 +244,4 @@
                     animation: false,
                     plugins: {
                         title: { display: true, text: '2. Espectro de Frequência (FFT Z)', color: '#F8FAFC' },
-                        legend: { display: false }
-                    },
-                    scales: {
-                        x: { ticks: { color: '#CBD5E1' }, grid: { color: '#334155' } },
-                        y: { ticks: { color: '#CBD5E1' }, grid: { color: '#334155' } }
-                    }
-                }
-            });
-        }
-
-        inicializarGraficos();
-
-        // OUVINTE EM TEMPO REAL DO FIREBASE
-        db.ref('dadosAtuais').on('value', (snapshot) => {
-            const dados = snapshot.val();
-            if (!dados) return;
-
-            document.getElementById('txtLiveStatus').innerText = "CONECTADO (AO VIVO)";
-
-            let t = dados.tempo || new Date().toLocaleTimeString();
-            let x = Number(dados.x || 0);
-            let y = Number(dados.y || 0);
-            let z = Number(dados.z || 0);
-            let status = dados.status || "Normal";
-
-            totalLeituras++;
-            if (Math.abs(z) > maxZGlobal) {
-                maxZGlobal = Math.abs(z);
-            }
-
-            // Atualiza KPIs
-            document.getElementById('kpiStatus').innerText = status;
-            document.getElementById('kpiMaxZ').innerText = maxZGlobal.toFixed(4);
-            document.getElementById('kpiLeituras').innerText = totalLeituras.toLocaleString('pt-BR');
-
-            // Atualiza Gráfico de Aceleração
-            let labels = chartAcelInstance.data.labels;
-            let dataX = chartAcelInstance.data.datasets[0].data;
-            let dataY = chartAcelInstance.data.datasets[1].data;
-            let dataZ = chartAcelInstance.data.datasets[2].data;
-
-            labels.push(t);
-            dataX.push(x);
-            dataY.push(y);
-            dataZ.push(z);
-
-            if (labels.length > MAX_PONTOS) {
-                labels.shift();
-                dataX.shift();
-                dataY.shift();
-                dataZ.shift();
-            }
-            chartAcelInstance.update('none');
-
-            // Atualiza Gráfico FFT (se houver dados enviados pelo simulador)
-            if (dados.fft_freq_z && dados.fft_mag_z) {
-                chartFFTInstance.data.labels = dados.fft_freq_z;
-                chartFFTInstance.data.datasets[0].data = dados.fft_mag_z;
-                chartFFTInstance.update('none');
-            }
-        });
-    </script>
-</body>
-</html>
+                        legend: { display:
