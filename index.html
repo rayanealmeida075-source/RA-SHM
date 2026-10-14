@@ -162,8 +162,8 @@
     <div class="controls">
         <div class="input-group">
             <input type="text" id="firebaseUrlInput" value="https://shm-tcc-default-rtdb.firebaseio.com/" placeholder="Cole a URL base do seu Firebase aqui...">
-            <button onclick="buscarDadosAgora()">Atualizar Agora</button>
-            <span id="lastUpdate" class="status-badge">Automático Ativo</span>
+            <button onclick="conectarFirebase()">Reconectar</button>
+            <span id="lastUpdate" class="status-badge">Tempo Real Ativo</span>
         </div>
     </div>
 
@@ -198,8 +198,9 @@
         let chartFFTInstance = null;
         let totalLeituras = 0;
         let maxZGlobal = 0;
+        let dbRef = null;
 
-        const MAX_PONTOS = 32; // Tamanho ideal de janela para visualização rápida da FFT
+        const MAX_PONTOS = 32;
 
         function inicializarGraficos() {
             try {
@@ -266,19 +267,17 @@
             }
         }
 
-        // Função DFT/FFT simplificada e robusta para navegador
         function calcularFFT(sinal) {
             const N = sinal.length;
             const magnitudes = [];
             const frequencias = [];
-            const fs = 1.0; // Frequência de amostragem de referência
+            const fs = 1.0; 
 
-            // Remove a componente contínua (DC offset) para evitar barras gigantes no início
             const media = sinal.reduce((a, b) => a + b, 0) / N;
             const sinalZeroMean = sinal.map(v => v - media);
 
             const metade = Math.floor(N / 2);
-            for (let k = 1; k < metade; k++) { // Começa em 1 para ignorar o componente DC (0 Hz)
+            for (let k = 1; k < metade; k++) {
                 let real = 0;
                 let imag = 0;
                 for (let n = 0; n < N; n++) {
@@ -301,7 +300,7 @@
             document.getElementById('txtLiveStatus').innerText = "CONECTADO (AO VIVO)";
             document.getElementById('lastUpdate').innerText = "Atualizado às " + new Date().toLocaleTimeString();
 
-            let t = dados.tempo || new Date().toLocaleTimeString();
+            let t = new Date().toLocaleTimeString();
             let x = Number(dados.x || 0);
             let y = Number(dados.y || 0);
             let z = Number(dados.z || 0);
@@ -335,7 +334,6 @@
                 }
                 chartAcelInstance.update('none');
 
-                // Executa a FFT automaticamente assim que houver pontos suficientes
                 if (dataZ.length >= 8 && chartFFTInstance) {
                     const resultadoFFT = calcularFFT(dataZ);
                     chartFFTInstance.data.labels = resultadoFFT.frequencias;
@@ -345,7 +343,7 @@
             }
         }
 
-        function buscarDadosAgora() {
+        function conectarFirebase() {
             const inputEl = document.getElementById('firebaseUrlInput');
             if (!inputEl) return;
 
@@ -354,23 +352,37 @@
 
             urlInput = urlInput.replace(/\/dadosAtuais(\.json)?\/?$/, '').replace(/\.json\/?$/, '');
 
-            fetch(`${urlInput}/dadosAtuais.json`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data) {
-                        processarDados(data);
-                    }
-                })
-                .catch(err => console.error("Erro ao buscar dados:", err));
+            // Inicializa o Firebase dinamicamente se ainda não foi inicializado
+            if (!firebase.apps.length) {
+                firebase.initializeApp({
+                    databaseURL: urlInput
+                });
+            } else {
+                // Se já houver app, atualizamos a referência se necessário
+                firebase.app().options.databaseURL = urlInput;
+            }
+
+            // Remove escuta anterior se existir para evitar duplicação
+            if (dbRef) {
+                dbRef.off();
+            }
+
+            // Configura o listener em tempo real nativo do Firebase (sem polling/travamentos)
+            dbRef = firebase.database().ref('dadosAtuais');
+            dbRef.on('value', (snapshot) => {
+                const data = snapshot.val();
+                if (data) {
+                    processarDados(data);
+                }
+            }, (error) => {
+                console.error("Erro no Firebase Realtime:", error);
+                document.getElementById('txtLiveStatus').innerText = "ERRO DE CONEXÃO";
+            });
         }
 
         window.addEventListener('DOMContentLoaded', () => {
             inicializarGraficos();
-            buscarDadosAgora();
-
-            setInterval(() => {
-                buscarDadosAgora();
-            }, 1000);
+            conectarFirebase();
         });
     </script>
 </body>
