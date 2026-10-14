@@ -199,7 +199,7 @@
         let totalLeituras = 0;
         let maxZGlobal = 0;
 
-        const MAX_PONTOS = 60;
+        const MAX_PONTOS = 64; // Mantido em potência de 2 ideal para FFT
 
         function inicializarGraficos() {
             try {
@@ -251,14 +251,40 @@
                             legend: { display: false }
                         },
                         scales: {
-                            x: { ticks: { color: '#CBD5E1' }, grid: { color: '#334155' } },
-                            y: { ticks: { color: '#CBD5E1' }, grid: { color: '#334155' } }
+                            x: { ticks: { color: '#CBD5E1' }, grid: { color: '#334155' }, title: { display: true, text: 'Frequência (Hz)', color: '#CBD5E1' } },
+                            y: { ticks: { color: '#CBD5E1' }, grid: { color: '#334155' }, title: { display: true, text: 'Magnitude', color: '#CBD5E1' } }
                         }
                     }
                 });
             } catch (e) {
                 console.error("Erro ao inicializar gráficos:", e);
             }
+        }
+
+        // Implementação simples de FFT (Discrete Fourier Transform) em JavaScript puro para rodar direto no navegador
+        function calcularFFT(sinal) {
+            const N = sinal.length;
+            const magnitudes = [];
+            const frequencias = [];
+            const fs = 10; // Frequência de amostragem estimada (Hz)
+
+            // Calculamos apenas até N/2 (Nyquist)
+            const metade = Math.floor(N / 2);
+            for (let k = 0; k < metade; k++) {
+                let real = 0;
+                let imag = 0;
+                for (let n = 0; n < N; n++) {
+                    const angulo = (2 * Math.PI * k * n) / N;
+                    real += sinal[n] * Math.cos(angulo);
+                    imag -= sinal[n] * Math.sin(angulo);
+                }
+                const mag = Math.sqrt(real * real + imag * imag) / N;
+                magnitudes.push(Number(mag.toFixed(4)));
+                
+                const freq = (k * fs) / N;
+                frequencias.push(freq.toFixed(1) + ' Hz');
+            }
+            return { frequencias, magnitudes };
         }
 
         function processarDados(dados) {
@@ -300,12 +326,14 @@
                     dataZ.shift();
                 }
                 chartAcelInstance.update('none');
-            }
 
-            if (chartFFTInstance && dados.fft_freq_z && dados.fft_mag_z) {
-                chartFFTInstance.data.labels = dados.fft_freq_z;
-                chartFFTInstance.data.datasets[0].data = dados.fft_mag_z;
-                chartFFTInstance.update('none');
+                // Executa a FFT automaticamente com base no histórico do Eixo Z acumulado
+                if (dataZ.length >= 8 && chartFFTInstance) {
+                    const resultadoFFT = calcularFFT(dataZ);
+                    chartFFTInstance.data.labels = resultadoFFT.frequencias;
+                    chartFFTInstance.data.datasets[0].data = resultadoFFT.magnitudes;
+                    chartFFTInstance.update('none');
+                }
             }
         }
 
