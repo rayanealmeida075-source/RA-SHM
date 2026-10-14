@@ -199,7 +199,7 @@
         let totalLeituras = 0;
         let maxZGlobal = 0;
 
-        const MAX_PONTOS = 64; // Mantido em potência de 2 ideal para FFT
+        const MAX_PONTOS = 32; // Tamanho ideal de janela para visualização rápida da FFT
 
         function inicializarGraficos() {
             try {
@@ -252,7 +252,12 @@
                         },
                         scales: {
                             x: { ticks: { color: '#CBD5E1' }, grid: { color: '#334155' }, title: { display: true, text: 'Frequência (Hz)', color: '#CBD5E1' } },
-                            y: { ticks: { color: '#CBD5E1' }, grid: { color: '#334155' }, title: { display: true, text: 'Magnitude', color: '#CBD5E1' } }
+                            y: { 
+                                ticks: { color: '#CBD5E1' }, 
+                                grid: { color: '#334155' }, 
+                                beginAtZero: true,
+                                title: { display: true, text: 'Magnitude', color: '#CBD5E1' } 
+                            }
                         }
                     }
                 });
@@ -261,28 +266,31 @@
             }
         }
 
-        // Implementação simples de FFT (Discrete Fourier Transform) em JavaScript puro para rodar direto no navegador
+        // Função DFT/FFT simplificada e robusta para navegador
         function calcularFFT(sinal) {
             const N = sinal.length;
             const magnitudes = [];
             const frequencias = [];
-            const fs = 10; // Frequência de amostragem estimada (Hz)
+            const fs = 1.0; // Frequência de amostragem de referência
 
-            // Calculamos apenas até N/2 (Nyquist)
+            // Remove a componente contínua (DC offset) para evitar barras gigantes no início
+            const media = sinal.reduce((a, b) => a + b, 0) / N;
+            const sinalZeroMean = sinal.map(v => v - media);
+
             const metade = Math.floor(N / 2);
-            for (let k = 0; k < metade; k++) {
+            for (let k = 1; k < metade; k++) { // Começa em 1 para ignorar o componente DC (0 Hz)
                 let real = 0;
                 let imag = 0;
                 for (let n = 0; n < N; n++) {
                     const angulo = (2 * Math.PI * k * n) / N;
-                    real += sinal[n] * Math.cos(angulo);
-                    imag -= sinal[n] * Math.sin(angulo);
+                    real += sinalZeroMean[n] * Math.cos(angulo);
+                    imag -= sinalZeroMean[n] * Math.sin(angulo);
                 }
                 const mag = Math.sqrt(real * real + imag * imag) / N;
                 magnitudes.push(Number(mag.toFixed(4)));
                 
                 const freq = (k * fs) / N;
-                frequencias.push(freq.toFixed(1) + ' Hz');
+                frequencias.push(freq.toFixed(2) + ' Hz');
             }
             return { frequencias, magnitudes };
         }
@@ -327,7 +335,7 @@
                 }
                 chartAcelInstance.update('none');
 
-                // Executa a FFT automaticamente com base no histórico do Eixo Z acumulado
+                // Executa a FFT automaticamente assim que houver pontos suficientes
                 if (dataZ.length >= 8 && chartFFTInstance) {
                     const resultadoFFT = calcularFFT(dataZ);
                     chartFFTInstance.data.labels = resultadoFFT.frequencias;
@@ -356,12 +364,10 @@
                 .catch(err => console.error("Erro ao buscar dados:", err));
         }
 
-        // Executa com segurança na abertura da página sem tela branca
         window.addEventListener('DOMContentLoaded', () => {
             inicializarGraficos();
             buscarDadosAgora();
 
-            // Atualiza automaticamente a cada 1 segundo sem precisar de nenhum clique
             setInterval(() => {
                 buscarDadosAgora();
             }, 1000);
