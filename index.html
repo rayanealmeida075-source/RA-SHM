@@ -256,6 +256,8 @@
                                 ticks: { color: '#CBD5E1' }, 
                                 grid: { color: '#334155' }, 
                                 beginAtZero: true,
+                                suggestedMin: 0,
+                                suggestedMax: 0.1, // Ajuste inicial para evitar esmagamento em amplitudes baixas
                                 title: { display: true, text: 'Magnitude', color: '#CBD5E1' } 
                             }
                         }
@@ -340,6 +342,11 @@
                     const resultadoFFT = calcularFFT(dataZ);
                     chartFFTInstance.data.labels = resultadoFFT.frequencias;
                     chartFFTInstance.data.datasets[0].data = resultadoFFT.magnitudes;
+                    
+                    // Ajuste dinâmico inteligente do eixo Y baseada na maior magnitude do espectro atual
+                    const maxMag = Math.max(...resultadoFFT.magnitudes, 0.01);
+                    chartFFTInstance.options.scales.y.max = maxMag * 1.25; // Dá uma margem de 25% acima do maior pico
+
                     chartFFTInstance.update('none');
                 }
             }
@@ -352,26 +359,4 @@
             let urlInput = inputEl.value.trim();
             if (!urlInput) return;
 
-            urlInput = urlInput.replace(/\/dadosAtuais(\.json)?\/?$/, '').replace(/\.json\/?$/, '');
-
-            fetch(`${urlInput}/dadosAtuais.json`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data) {
-                        processarDados(data);
-                    }
-                })
-                .catch(err => console.error("Erro ao buscar dados:", err));
-        }
-
-        window.addEventListener('DOMContentLoaded', () => {
-            inicializarGraficos();
-            buscarDadosAgora();
-
-            setInterval(() => {
-                buscarDadosAgora();
-            }, 1000);
-        });
-    </script>
-</body>
-</html>
+            url
