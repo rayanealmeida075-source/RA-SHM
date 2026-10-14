@@ -163,7 +163,7 @@
         <div class="input-group">
             <input type="text" id="firebaseUrlInput" value="https://shm-tcc-default-rtdb.firebaseio.com/" placeholder="Cole a URL base do seu Firebase aqui...">
             <button onclick="conectarFirebase()">Reconectar</button>
-            <span id="lastUpdate" class="status-badge">Tempo Real Ativo</span>
+            <span id="lastUpdate" class="status-badge">Tempo Real Fluido Ativo</span>
         </div>
     </div>
 
@@ -200,7 +200,7 @@
         let maxZGlobal = 0;
         let dbRef = null;
 
-        const MAX_PONTOS = 32;
+        const MAX_PONTOS = 40;
 
         function inicializarGraficos() {
             try {
@@ -212,14 +212,14 @@
                     data: {
                         labels: [],
                         datasets: [
-                            { label: 'Eixo X', data: [], borderColor: '#EF4444', borderWidth: 1.5, fill: false, pointRadius: 0 },
-                            { label: 'Eixo Y', data: [], borderColor: '#10B981', borderWidth: 1.5, fill: false, pointRadius: 0 },
-                            { label: 'Eixo Z', data: [], borderColor: '#3B82F6', borderWidth: 1.5, fill: false, pointRadius: 0 }
+                            { label: 'Eixo X', data: [], borderColor: '#EF4444', borderWidth: 2, fill: false, tension: 0.3, pointRadius: 0 },
+                            { label: 'Eixo Y', data: [], borderColor: '#10B981', borderWidth: 2, fill: false, tension: 0.3, pointRadius: 0 },
+                            { label: 'Eixo Z', data: [], borderColor: '#3B82F6', borderWidth: 2, fill: false, tension: 0.3, pointRadius: 0 }
                         ]
                     },
                     options: {
                         responsive: true,
-                        animation: false,
+                        animation: { duration: 200 }, // Suaviza a transição entre atualizações
                         plugins: {
                             title: { display: true, text: '1. Tendência Temporal de Aceleração (X, Y, Z)', color: '#F8FAFC' },
                             legend: { labels: { color: '#CBD5E1' } }
@@ -246,7 +246,7 @@
                     },
                     options: {
                         responsive: true,
-                        animation: false,
+                        animation: { duration: 150 },
                         plugins: {
                             title: { display: true, text: '2. Espectro de Frequência (FFT Z)', color: '#F8FAFC' },
                             legend: { display: false }
@@ -332,13 +332,14 @@
                     dataY.shift();
                     dataZ.shift();
                 }
-                chartAcelInstance.update('none');
+                // Usando animação suave configurada nas opções em vez de 'none'
+                chartAcelInstance.update();
 
                 if (dataZ.length >= 8 && chartFFTInstance) {
                     const resultadoFFT = calcularFFT(dataZ);
                     chartFFTInstance.data.labels = resultadoFFT.frequencias;
                     chartFFTInstance.data.datasets[0].data = resultadoFFT.magnitudes;
-                    chartFFTInstance.update('none');
+                    chartFFTInstance.update();
                 }
             }
         }
@@ -352,22 +353,18 @@
 
             urlInput = urlInput.replace(/\/dadosAtuais(\.json)?\/?$/, '').replace(/\.json\/?$/, '');
 
-            // Inicializa o Firebase dinamicamente se ainda não foi inicializado
             if (!firebase.apps.length) {
                 firebase.initializeApp({
                     databaseURL: urlInput
                 });
             } else {
-                // Se já houver app, atualizamos a referência se necessário
                 firebase.app().options.databaseURL = urlInput;
             }
 
-            // Remove escuta anterior se existir para evitar duplicação
             if (dbRef) {
                 dbRef.off();
             }
 
-            // Configura o listener em tempo real nativo do Firebase (sem polling/travamentos)
             dbRef = firebase.database().ref('dadosAtuais');
             dbRef.on('value', (snapshot) => {
                 const data = snapshot.val();
